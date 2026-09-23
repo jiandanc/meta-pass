@@ -1,0 +1,78 @@
+docs/assets/meta-pass-v1-retrospective.zh_CN.md
+  s_4c634dd4d27a69::t_755d331f7660a5 37-38,41-42
+docs/CHANGELOG.zh_CN.md
+  s_4c634dd4d27a69::t_652007d3430670 9-15
+docs/assets/meta-pass-signing-design.md
+  s_4c634dd4d27a69::t_eb012d449a3d7e 14-16
+  s_4c634dd4d27a69::t_58595c4e1c3eaa 121-122
+install-slot/README.md
+  s_4c634dd4d27a69::t_c5c8553f960fdc 75-76
+docs/assets/handoff-unsigned-rootcause.md
+  s_4c634dd4d27a69::t_9db9dfc334ddf4 13
+main/main.c
+  s_4c634dd4d27a69::t_b0deef832d2187 301-303
+  s_4c634dd4d27a69::t_09536c4872fbe7 275-276
+  s_4c634dd4d27a69::t_42fa1982a4feb2 6-7,9-11,48,54,58,140,152,163,168,252-254,283-286,290,294-295,297-298,300,304-305,308-309,317
+docs/assets/meta-pass-design.md
+  s_4c634dd4d27a69::t_cebc4294680c76 287-288,291-292,295-307
+  s_4c634dd4d27a69::t_62f4986c1d124e 329-331
+  s_4c634dd4d27a69::t_126cf801e431e2 225-227
+  s_4c634dd4d27a69::t_fc388af0d6d980 205-208
+  s_4c634dd4d27a69::t_311432771016ce 345-348
+  s_4c634dd4d27a69::t_da543484ab811d 408
+docs/assets/meta-pass-v1-retrospective.md
+  s_4c634dd4d27a69::t_b986f9440c0606 48,52-54
+install-slot/README.zh_CN.md
+  s_4c634dd4d27a69::t_b780d9e887fb04 64-65
+docs/BUGS.md
+  s_4c634dd4d27a69::t_46be458fe4a235 44-45
+  s_4c634dd4d27a69::t_98e0a36b288285 113-114
+  s_4c634dd4d27a69::t_085dd30efc6c37 23-25
+docs/BUGS.zh_CN.md
+  s_4c634dd4d27a69::t_ca1eb4207432c3 21-23
+docs/assets/meta-pass-signing-design.zh_CN.md
+  s_4c634dd4d27a69::t_4f539f418325bf 114
+  s_4c634dd4d27a69::t_5457b0faf22ec5 14-15
+docs/assets/meta-pass-design.zh_CN.md
+  s_4c634dd4d27a69::t_d4426702c116c0 70-72
+  s_4c634dd4d27a69::t_4bebcdf898bc60 258-259
+  s_4c634dd4d27a69::t_8853a325ee0d17 182-183
+  s_4c634dd4d27a69::t_f28fb84e330ca3 328
+  s_4c634dd4d27a69::t_b5af4716c53c1a 270-272
+  s_4c634dd4d27a69::t_3e4656e4d6ca16 228,230,233-241
+  s_4c634dd4d27a69::t_d0e57f1becb6bf 165-167
+  s_4c634dd4d27a69::t_f219102120dcf0 145
+docs/CHANGELOG.md
+  s_4c634dd4d27a69::t_7c4c2018cfaad0 9-19
+main/meta_seq.h
+  s_4c634dd4d27a69::t_a043a61d8582e5 2
+README.md
+  s_4c634dd4d27a69::t_6ba2ce28e03e23 54-59
+  s_4c634dd4d27a69::t_29da94e64b666a 114-115,121,123-127
+  s_4c634dd4d27a69::t_3e54e48e53a598 242
+  s_4c634dd4d27a69::t_39bbf48aa40680 144-145
+docs/assets/handoff-unsigned-rootcause.zh_CN.md
+  s_4c634dd4d27a69::t_6193a485109612 10
+README.zh_CN.md
+  s_4c634dd4d27a69::t_21c2cce10ad8d4 57-60
+  s_4c634dd4d27a69::t_db0312a495d1a1 101-102,108,110-114
+  s_4c634dd4d27a69::t_45cf25b557c64f 128-129
+  s_4c634dd4d27a69::t_bdefee7ea25041 47-49
+  s_4c634dd4d27a69::t_b5566140fdf07f 214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.45-trip",
+  "base_commit_sha": "48e855904b3d24ac33c4b0a5d1c500866df24f84",
+  "prompts": {},
+  "sessions": {
+    "s_4c634dd4d27a69": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82a8faca-9f98-4fb3-b575-7a2d54123eb5",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "junpengchen <junpengchen@trip.com>"
+    }
+  }
+}
