@@ -20,7 +20,9 @@ listed at the end, with evidence.
 ## PASS-RADAR "still unsigned" — root cause and resolution
 
 Symptom reported on-device: the pass-radar firmware signed with the *fixed*
-signing tool still shows "Unsigned firmware!" at boot.
+signing tool still shows the "Unsigned" state at boot (the launcher logged
+`signature: unsigned`; at the time this also showed an on-screen "Unsigned
+firmware!" warning, a page removed on 2026-09-23).
 
 Investigation (all checks reproducible on this host):
 
@@ -39,8 +41,8 @@ Investigation (all checks reproducible on this host):
    `writeFlash` into the same 4 KB tail sector that already held the MSIG
    signature, erasing it, and (b) computed the blob address from the
    partition size, flashing outside the slot. Installing through it destroys
-   the signature sector → the launcher sees an erased (0xFF) tail → "Unsigned
-   firmware!" — even though the .bin file itself was signed correctly.
+   the signature sector → the launcher sees an erased (0xFF) tail → the slot is
+   reported unsigned — even though the .bin file itself was signed correctly.
 
 **Conclusion:** re-sign with the current `sign-firmware.sh`, then install via
 the (now fixed) dev page or the Cloudflare Pages page — do **not** re-install
@@ -108,7 +110,8 @@ so `-Werror` never sees it).
 
 **Root cause.** Half-finished feature: the SOC → text formatting and the
 "don't draw when unavailable" guard were never written. Affected on both call
-sites — the list screen (`main.c:143`) and the detail screen (`main.c:308`) —
+sites — the list screen (`main.c:143`) and the detail screen (`main.c:308`,
+removed 2026-09-23) —
 i.e. the two most-used pages show garbage in the top-right corner.
 
 **Fix.**

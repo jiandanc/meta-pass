@@ -11,8 +11,9 @@
 ## 1. Goals and Principles
 
 - Application-layer software signature badge, **reversible**: no eFuse / Secure Boot v2.
-- Goal: the meta-pass launcher can verify a child firmware's origin; verification passes → detail page boots
-  directly; unsigned → BOOT/CANCEL warning page.
+- Goal: the meta-pass launcher can verify a child firmware's origin and record the result
+  (logged at boot). Signature status does not gate the boot path — signed and unsigned
+  firmware alike boot on one OK click from the slot list.
 - Single trust anchor: **one ECDSA-P256 key pair**. The private key lives only in the macOS Keychain
   (label `com.folotoy.meta-pass.signing`); the public key is compiled into the launcher firmware. Any
   "other private key / stale public key" combination = verification necessarily fails.
@@ -117,7 +118,8 @@ The front of the window stays 0xFF
 3. `tail_off = round_up(image_len, 4096)`; read the sector only if `tail_off + 4096 ≤ part->size`.
 4. `meta_sign_verify(digest, image_len, sector, 4096)`:
    magic → payload_len ∈ [64..72] → xor → mbedtls verifies the DER signature with the embedded public key.
-5. `signed_fw = (result == META_SIG_OK)`; unsigned → BOOT/CANCEL warning page (defaults to CANCEL).
+5. `signed_fw = (result == META_SIG_OK)`; the value is logged at boot and no longer changes
+   the boot flow (see `meta-pass-design.md` §8).
 
 ## 7. Install Channels
 

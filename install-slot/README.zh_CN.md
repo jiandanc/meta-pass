@@ -61,8 +61,8 @@ node tools/install-slot/server.mjs
      拉取下载，页面按商店公布的 SHA-256 校验。
 5. **显示名**（可选，≤32 可打印 ASCII）：默认从玩法标题或文件名预填；
    写入槽位尾部 4KB 的 blob 区，之后在 meta-pass 菜单显示。
-6. **安装** → 等 `Done.` → **断电重启**设备，然后在 meta-pass 菜单选槽位。
-   未签名固件启动前走 BOOT / CANCEL 警告菜单（UP/DOWN 选择，OK 单击确认）。
+6. **安装** → 等 `Done.` → **断电重启**设备，然后在 meta-pass 菜单选槽位、按 OK 启动。
+   无论固件是否签名，启动都是一次按键。
 
 ## 注意事项
 

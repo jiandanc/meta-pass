@@ -72,9 +72,8 @@ API proxy lives.
    title or file name; written into the slot's name blob sector and shown in
    the meta-pass menu.
 6. **Install** → wait for `Done.` → **power-cycle** the device (unplug/replug
-   or power button), then select the slot in the meta-pass menu. Unsigned
-   firmware goes through a BOOT / CANCEL warning menu (UP/DOWN to choose,
-   OK click to confirm) before booting.
+   or power button), then select the slot in the meta-pass menu and press OK to
+   boot it. Booting is a single press whether or not the firmware is signed.
 
 ## Notes
 

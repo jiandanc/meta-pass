@@ -44,9 +44,9 @@ bootloader 改动。
     （自动下载并按商店公布的 SHA-256 校验）；
   - **设备热点 + 网页导入**：设备开 SoftAP 显示配对码，手机/电脑连上后网页上传。
 - **完整性校验**：magic、chip id、尺寸、segment 结构逐层校验，`esp_ota_end()` 权威
-  复核；SHA-256 在详情页可见，可与商店公布值对照。
-- **未签名警告**：未签名固件启动前弹出警告页，UP/DOWN 选择 BOOT / CANCEL，OK 单击
-  确认（默认停在 CANCEL）；恶意固件仍有完整 Flash 读写能力（无 eFuse 强制签名），
+  复核；校验不通过的槽位显示为 `(invalid)`，在上传覆盖它之前不可启动。
+- **一键启动**：UP/DOWN 选槽位，OK 立即启动——签名与未签名固件一律如此，没有
+  二次确认步骤。没有 eFuse 强制签名，恶意固件仍有完整 Flash 读写能力，
   所以只装你信任来源的固件。
 - **永不困在子固件里**：未适配的子固件一律按"试运行"处理——任何重启（含断电）都
   自动回启动器；适配过的固件可以长期驻留，并提供 OK 长按返回启动器。
@@ -54,16 +54,16 @@ bootloader 改动。
   门禁里逐字节校验基线布局。
 
 <p align="center">
+  <img src="docs/assets/images/meta-pass-launcher.png"
+       alt="启动器主列表：SLOT 0/1/2 行显示固件名，外加一行 IMPORT FIRMWARE"
+       width="800">
+  &nbsp;&nbsp;&nbsp;
   <img src="docs/assets/images/meta-pass-usb-installer.png"
        alt="USB 串口安装页：连接、选槽、选固件来源、显示名、进度与日志"
        width="800">
   &nbsp;&nbsp;&nbsp;
   <img src="docs/assets/images/meta-pass-wifi-import.png"
        alt="Wi-Fi 导入页：SSID、密码、一次性配对码、倒计时"
-       width="800">
-  &nbsp;&nbsp;&nbsp;
-  <img src="docs/assets/images/meta-pass-unsigned-warning.png"
-       alt="未签名固件警告：BOOT / CANCEL 菜单，OK 单击确认"
        width="800">
 </p>
 
@@ -98,18 +98,20 @@ Install → 断电重启。完整指南：[install-slot/README.zh_CN.md](install
 
 ### 3. 启动
 
-主列表 UP/DOWN 选槽位，OK 进详情，BOOT 确认。未签名固件先弹警告页：UP/DOWN
-选 BOOT / CANCEL，OK 单击确认（默认停在 CANCEL）。
+主列表 UP/DOWN 选槽位，OK 立即启动。无论固件是否签名，启动都是一次按键；槽位为空
+或镜像校验不通过时按 OK 无动作。
 
 ## 按键操作
 
 | 页面 | UP/DOWN | OK 单击 | OK LONG（1.5 秒） |
 | --- | --- | --- | --- |
-| 主列表 | 选择槽位 | 进入详情 / 进导入页 | — |
-| 槽位详情 | 选 BOOT/DELETE/BACK | 确认 | 返回主列表 |
-| 未签名警告 | 选 BOOT/CANCEL | 确认所选 | 取消（回详情页） |
-| 删除确认 | — | 取消 | 确认删除 |
+| 主列表 | 选择槽位 | 启动该槽位 / 进导入页 | — |
 | 导入页 | — | — | 退出导入、回主列表 |
+| 彩蛋页 | 滚动文本 | 返回主列表 | — |
+
+主列表上快速连按 `UP UP DOWN DOWN` 打开当前选中槽位的彩蛋文本。
+替换或清空某槽位的固件，直接重新导入覆盖它即可（网页导入页是唯一的槽位写入路径）；
+设备端没有删除入口。
 
 适配过的子固件内：OK LONG = 返回启动器（子固件自行挂接，见下节）。
 
@@ -123,8 +125,8 @@ Install → 断电重启。完整指南：[install-slot/README.zh_CN.md](install
 2. 把 OK 键的 LONG（1.5 秒）事件接到 `metapass_return_to_launcher()`。
 
 签名徽章（可选）:`tools/signing/sign-firmware.sh <app.bin> [--egg-text "..."]` 在镜像后
-追加 ECDSA-P256 徽章（可附带彩蛋文本）;meta-pass 详情页显示 SIGNED 并跳过警告页
-直接启动。输入可以是裸 app 镜像,也可以是 **Full 合并镜像(bootloader+分区表+app,
+追加 ECDSA-P256 徽章（可附带彩蛋文本）;meta-pass 记录该槽位为 SIGNED（启动时打日志）。
+签名不改变启动路径——徽章是来源证明元数据，不是启动门禁。输入可以是裸 app 镜像,也可以是 **Full 合并镜像(bootloader+分区表+app,
 即市场可刷的发布格式)**——合并镜像的头部字节逐字节保留,只在 app 后追加 pad 与
 4KB 元数据 sector。私钥托管在 macOS Keychain（首次用 `tools/signing/bin/keychain-keygen` 生成，
 同时发布 `tools/signing/public.pem`)；签名私钥由 meta-pass 发布方持有——
@@ -209,7 +211,7 @@ node tools/install-slot/test-extract.mjs   # 安装页解包/名字 blob 测试
 | --- | --- |
 | 构建 | `validate.sh` 全门禁 PASS；应用 1,024,880 / 1,507,328 B（32% 余量）；合并镜像 8 MB；`cardid` 不动 |
 | Host tests | `meta_image`/`meta_slots`/`meta_import`/`meta_name` 四套件全过；安装页 node 测试 7/7；**新增** `test_meta_net_contract.py` 钉住 JS↔C 路由契约（方法+路径一致性）；**新增** `test_meta_net_upload.c`（21 用例）用真实 FIPS 180-4 SHA-256 驱动完整的配对→上传→刷入→校验→blob 流程，ESP-IDF 桩替换，零硬件可测 |
-| 模拟器（passport-sim） | 三槽列表（含动态 blob 偏移的真名：ota_0→0x355000，ota_1→0x55f000）；导航；详情元数据（`name: Pocket Walkie`，ver 1，1262 KB，sha 前缀）；空槽 BOOT 无操作；未签名警告页；LONG2 启动 ota_0；硬重启回滚到启动器；ota_1 Passport Radar 启动 + 回滚；DELETE→LONG2 擦除（SLOT 1→empty，重启后持久）；IMPORT 页（凭证/配对码/倒计时）；两项观察到判定为非固件 bug：确认页残留行 = 模拟器画布脏区伪影；导入页长按退出需更长按住 = 模拟器时序模型 — *记录于 2026-09-13，早于 LONG2 移除与 BOOT/CANCEL 启动菜单；这两项交互需重测* |
+| 模拟器（passport-sim） | 三槽列表（含动态 blob 偏移的真名：ota_0→0x355000，ota_1→0x55f000）；导航；空槽 OK 无操作；启动 ota_0；硬重启回滚到启动器；ota_1 Passport Radar 启动 + 回滚；IMPORT 页（凭证/配对码/倒计时） — *记录于 2026-09-13、2026-09-23 更新；该行仍写着 2026-09-23 之前的交互（详情元数据、未签名警告页、BOOT/CANCEL 菜单、设备端 DELETE），这些已被一键启动流程移除，需重测* |
 | GitHub Actions | 静态检查（Linux/GCC）✅、固件门禁（ESP-IDF Docker）✅ |
 | CI artifact SHA-256 | `b86ca4fe…1b28e773`（分发包权威参考；本地编译因嵌入时间戳哈希不同） |
 

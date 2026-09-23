@@ -202,10 +202,10 @@ compiled into meta-pass (`main/meta_sign_pubkey.h`, generated from
     [1B xor checksum of preceding header+signature bytes]
 ```
 
-`scan_one` calls `meta_sign_verify()` after `esp_image_verify()` passes. A slot with a
-valid signature shows "SIGNED" on the detail page and boots directly on OK click (no
-warning page). A slot without a signature badge is treated as unsigned — it goes
-through the unsigned-firmware warning page with BOOT / CANCEL selection.
+`scan_one` calls `meta_sign_verify()` after `esp_image_verify()` passes, and records the
+result in `meta_slot_info_t.signed_fw` for logging. Signature status no longer changes the
+boot flow: OK on a slot boots it whether or not it is signed (see §8). Integrity is still
+enforced separately — `esp_image_verify` decides whether the slot is bootable at all.
 
 ### 7.1 Optional Easter Egg Metadata
 
@@ -222,8 +222,9 @@ as absent.
   [1B xor checksum at fixed offset 3927, over all 3927 preceding bytes incl. padding]
 ```
 
-On device, the egg text of a slot is viewable from its detail page via a hidden key
-sequence: fast `UP UP DOWN DOWN` (four CLICKs, inter-key gap <0.5s) opens the egg page;
+On device, the egg text of a slot is viewable from the main list via a hidden key
+sequence: select the slot, then fast `UP UP DOWN DOWN` (four PRESSes, inter-key gap <0.5s)
+opens the egg page;
 `UP/DOWN` scroll the text, `OK` click returns. Slots without a valid MAEG field show
 "No egg."; corrupted fields show "Egg data corrupted.".
 
@@ -283,17 +284,27 @@ Keeps the `ui_pixel` theme (sky/grass/title board/mascot) and the top-right batt
 indicator (avoiding the cloud at `x≈188,y≈8`). UI text in English.
 
 - **Main list**: slot 0/1/2 rows show empty / the display name (real name written at install
-  time, core-name fallback otherwise); UP/DOWN to select, OK click for details.
-- **Detail page**: Boot (unsigned firmware goes to the warning page), Delete (confirm
-  page, OK LONG to confirm), back.
-- **Unsigned warning page**: warning text + BOOT / CANCEL rows; UP/DOWN to select, OK
-  click to confirm; defaults to CANCEL; OK LONG cancels (back to detail).
+  time, core-name fallback otherwise); UP/DOWN to select, **OK click boots that slot
+  immediately** (no confirmation step). The Import row opens the import page.
 - **Import page**: shows SSID/password/pairing code/IP/countdown; OK LONG exits and fully
   releases the network stack.
+- **Easter egg page**: entered from the main list by fast `UP UP DOWN DOWN`; shows the
+  selected slot's MAEG text; UP/DOWN scroll, OK click returns.
 - Global: `OK LONG` = back; inside a child firmware `OK LONG` = return to launcher.
 
-Delete = `esp_partition_erase_range` on the whole slot + clear metadata; it does not touch
-child-owned NVS data (children manage their own namespaces).
+Booting is deliberately one press: signed and unsigned firmware alike start on the OK
+click, with no BOOT/CANCEL warning step (product decision, 2026-09-23 — the earlier
+detail / warning / delete-confirm pages were removed for a faster two-step flow). The
+signature check still runs during the boot-time slot scan and is logged, but it no longer
+gates or warns; `esp_image_verify` (checksum + image hash) remains the integrity gate that
+decides whether a slot is bootable at all.
+
+Slot management is one-directional from the device: **there is no on-device delete**.
+Uploading a new firmware to an occupied slot replaces it (`esp_ota_begin` erases the
+partition), and the web import page is the only way to clear or overwrite a slot. A slot
+holding an invalid or corrupt image stays listed as `(invalid)` and is skipped by the OK
+click until it is overwritten through the import page. Delete via `esp_partition_erase_range`
+does not touch child-owned NVS data (children manage their own namespaces).
 
 ## 9. Test Strategy (TDD)
 
@@ -315,9 +326,9 @@ write, boot, rollback) go on the device-acceptance list.
 - **feat/shrink**: factory binary size < 1.43MB (target); 3 OTA slots visible in launcher
   list; blob offset dynamically computed per slot size;
 - Device checklist (verify item by item at delivery): import one firmware into each slot
-  and boot it; power-cycle auto-returns to launcher; adapted firmware persists; slot shows
-  empty after delete; corrupt file rejected; wrong pairing code rejected; repeated Import
-  enter/exit leaks nothing.
+  and boot it with one OK click; power-cycle auto-returns to launcher; adapted firmware
+  persists; re-importing over an occupied slot replaces it; corrupt file rejected; wrong
+  pairing code rejected; repeated Import enter/exit leaks nothing.
 
 ### 10.1 Simulator End-to-End Verification (2026-09-11, local esp-emu instance)
 
@@ -331,6 +342,10 @@ uploaded to the simulator. The full chain passed: launcher scan detected the slo
 unsigned-firmware warning → LONG2 confirm → child firmware booted and ran (WALKIE UI) →
 hard reset returned to the launcher per the rollback model (un-adapted child = trial boot).
 Not covered: the serial transport itself, Wi-Fi import (simulator has no AP support).
+Note: the "detail page → unsigned warning → confirm" part of that chain describes the UI as
+it was on 2026-09-11; those pages were removed on 2026-09-23 (see §8 and the decision log),
+so booting is now a single OK click on the list row. The scan, boot, and rollback findings
+are unaffected.
 
 2026-09-11 round 2 (dual slots + display-name blob): a merged image carrying
 play 105@ota_0 ("Pocket Walkie" blob) and play 81@ota_1 ("Passport Radar" blob).
@@ -390,3 +405,4 @@ convention (no recording child firmware exists yet).
 | 2026-09-12 | ota_2 dual-use: firmware slot or audio storage | separate storage partition | runtime check esp_image_verify(); littlefs ignores partition type; no partition-table conflict |
 | 2026-09-14 | Remove LONG2; one LONG threshold (1.5 s) | keep two-tier LONG/LONG2 | LONG meant "back" on most pages but "confirm boot" on the warning page — opposite semantics at the same hold duration confused users |
 | 2026-09-14 | Unsigned boot confirm = BOOT / CANCEL menu (UP/DOWN select, OK click confirm, default CANCEL) | OK LONG to confirm | same "UP/DOWN select + OK click confirm" model as the list and detail pages; keeps LONG = back everywhere |
+| 2026-09-23 | One-click boot from the list; remove the detail, unsigned-warning, and delete-confirm pages | keep the multi-step flow | the user asked for a shorter path: OK on a slot starts it immediately, with no BOOT/DELETE/BACK step and no BOOT/CANCEL step. Integrity still gates bootability (`esp_image_verify`); the signature result is logged but no longer warns. Delete moves off-device — re-importing over a slot is the way to replace it |

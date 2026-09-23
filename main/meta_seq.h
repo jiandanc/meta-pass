@@ -1,5 +1,5 @@
 // main/meta_seq.h —— 隐藏按键序列匹配器(纯逻辑,与 BSP/ESP-IDF 解耦)。
-// 彩蛋页入口:详情页快速连按 UP UP DOWN DOWN(四个 CLICK),
+// 彩蛋页入口:槽位列表页快速连按 UP UP DOWN DOWN(四次按下),
 // 相邻两键间隔必须严格小于 META_SEQ_GAP_MS,否则进度作废。
 #pragma once
 

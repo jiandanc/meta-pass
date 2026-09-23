@@ -45,9 +45,13 @@ launcher looks through all three drawers and draws the list on screen.
 There is a key pair: the private key belongs to the publisher; anyone may hold the
 public key for comparison. When publishing, the private key "stamps" the sticker
 page; the launcher on the device verifies the stamp with the public key — pattern
-matches, badge and name show up. The signing tool `sign-firmware.sh` can also tuck
+matches, the slot is recorded as signed. The signing tool `sign-firmware.sh` can also tuck
 an "easter-egg text" onto the sticker page, with `--check-egg-text` to verify it
 fits before shipping.
+
+(As of 2026-09-23 the seal is provenance, not a gate: the v1.0.0 UI warned before
+booting unsealed firmware, and that warning step was later removed so a slot boots on
+one OK press either way.)
 
 ### The single-file firmware = one hamburger
 

@@ -10,7 +10,7 @@
 ## 0. Resolution (2026-09-16, confirmed by on-device test)
 
 **The issue is resolved.** After re-flashing the signed child firmware through the fixed install page,
-on-device signature verification behaves as expected (SIGNED, no warning page). The root cause was the
+on-device signature verification behaves as expected (SIGNED, and no boot-time warning). The root cause was the
 **stale install page deployed on https://meta-pass.pages.dev/** (pre-dbbd091), not the signing chain:
 
 - The signing chain (key chain, image_len semantics, digest range, device verifier) was verified correct

@@ -6,7 +6,17 @@
 
 ## Unreleased
 
-(nothing)
+- Launcher UI simplified to **one-click boot** (2026-09-23): selecting a slot in the main
+  list and pressing OK now starts that firmware immediately, signed or unsigned. The slot
+  detail page (BOOT / DELETE / BACK), the unsigned-firmware BOOT / CANCEL warning page, and
+  the delete-confirmation page are removed, along with their code paths and strings.
+  Rationale: the user asked for a shorter path — the second step added nothing for the
+  signed case and only a single warning for the unsigned one. Integrity is unchanged:
+  `esp_image_verify` still decides whether a slot is bootable, and `meta_sign_verify` still
+  runs at boot-time scan (its result is logged, no longer shown or gating). Consequence:
+  there is no on-device delete — re-importing over a slot via the web import page replaces
+  it. The hidden easter-egg page (fast `UP UP DOWN DOWN`) is re-homed from the detail page
+  to the main list and now shows the highlighted slot's egg.
 
 ## v1.0.0 (2026-09-18)
 

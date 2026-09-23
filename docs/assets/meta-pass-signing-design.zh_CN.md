@@ -11,7 +11,8 @@
 ## 1. 目标与原则
 
 - 应用层软件签名徽章(application-layer signature badge),**可逆**:不使用 eFuse / Secure Boot v2。
-- 目标:子固件可被 meta-pass 启动器验明来源;验签通过 → 详情页直接启动;未签名 → BOOT/CANCEL 警告页。
+- 目标:子固件可被 meta-pass 启动器验明来源并记录结果(启动时打日志)。签名状态不改变启动路径——
+  签名与未签名固件一样,在槽位列表上按一次 OK 即启动。
 - 单一信任锚:**一个 ECDSA-P256 密钥对**。私钥只在 macOS Keychain(标签 `com.folotoy.meta-pass.signing`);
   公钥编译期嵌入启动器固件。任何"另一把私钥/旧公钥"组合 = 验签必然失败。
 - 布局契约以 IDF 二进制格式为准(非"我们认为的格式"),解析器必须与 `esp_image_verify` 逐字对齐。
@@ -110,7 +111,7 @@ xor 覆盖窗口前 3927 字节(含 padding)
 3. `tail_off = round_up(image_len, 4096)`;`tail_off + 4096 ≤ part->size` 才读 sector。
 4. `meta_sign_verify(digest, image_len, sector, 4096)`:
    magic → payload_len ∈ [64..72] → xor → mbedtls 用内嵌公钥验 DER 签名。
-5. `signed_fw = (result == META_SIG_OK)`;未签名 → BOOT/CANCEL 警告页(默认停在 CANCEL)。
+5. `signed_fw = (result == META_SIG_OK)`;该值在启动时打日志,不再改变启动流程(见 `meta-pass-design.md` §8)。
 
 ## 7. 安装通道
 

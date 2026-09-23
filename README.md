@@ -51,28 +51,28 @@ switch. No custom bootloader changes.
   - **Device hotspot + web import**: the device starts a SoftAP and shows a pairing
     code; upload from a phone or computer browser.
 - **Integrity checks**: magic, chip id, size and segment structure, with
-  `esp_ota_end()` as the authoritative recheck; the SHA-256 is shown on the detail
-  page for comparison with the store's value.
-- **Unsigned-firmware warning**: booting unsigned firmware shows a warning page with
-  BOOT / CANCEL buttons — UP/DOWN to choose, OK click to confirm (defaults to
-  CANCEL). Malicious firmware would still get full flash access (no eFuse
-  enforced signing) — only install firmware from sources you trust.
+  `esp_ota_end()` as the authoritative recheck. A slot that fails verification is listed
+  as `(invalid)` and cannot be booted until you upload over it again.
+- **One-click boot**: UP/DOWN to pick a slot, OK to start it — signed and unsigned
+  firmware alike, with no confirmation step. There is no eFuse-enforced signing, so
+  malicious firmware would still get full flash access; only install firmware from
+  sources you trust.
   reboot (including power loss) returns to the launcher. Adapted firmware can
   persist and wires OK LONG to return to the launcher.
 - **Identity safety**: the `cardid` partition is avoided by every install/flash path;
   `verify_firmware.py` byte-checks the baseline layout in the gate.
 
 <p align="center">
+  <img src="docs/assets/images/meta-pass-launcher.png"
+       alt="Launcher main list: SLOT 0/1/2 rows with firmware names plus an IMPORT FIRMWARE row"
+       width="800">
+  &nbsp;&nbsp;&nbsp;
   <img src="docs/assets/images/meta-pass-usb-installer.png"
        alt="USB serial install page: connect, pick slot, pick source, display name, progress and log"
        width="800">
   &nbsp;&nbsp;&nbsp;
   <img src="docs/assets/images/meta-pass-wifi-import.png"
        alt="Wi-Fi import page: SSID, password, one-time pairing code, countdown"
-       width="800">
-  &nbsp;&nbsp;&nbsp;
-  <img src="docs/assets/images/meta-pass-unsigned-warning.png"
-       alt="Unsigned firmware warning: BOOT / CANCEL menu, OK click to confirm"
        width="800">
 </p>
 
@@ -111,18 +111,20 @@ slot, upload a `.bin`.
 
 ### 3. Boot
 
-UP/DOWN to pick a slot, OK for details, BOOT to confirm. Unsigned firmware shows a
-warning page: UP/DOWN to choose BOOT / CANCEL, OK click to confirm (defaults to CANCEL).
+UP/DOWN to pick a slot, then OK to boot it right away. Booting is one press whatever the
+firmware's signature status; a slot holding an empty or invalid image does nothing.
 
 ## Button map
 
 | Page | UP/DOWN | OK click | OK LONG (1.5 s) |
 | --- | --- | --- | --- |
-| Main list | select slot | open details / import page | — |
-| Slot detail | BOOT/DELETE/BACK | confirm | back to list |
-| Unsigned warning | BOOT/CANCEL | confirm selection | cancel (back to detail) |
-| Delete confirm | — | cancel | confirm delete |
+| Main list | select slot | boot the slot / open import page | — |
 | Import page | — | — | exit import, back to list |
+| Easter egg | scroll text | back to list | — |
+
+Fast `UP UP DOWN DOWN` on the main list opens the selected slot's easter-egg text.
+To replace or clear a slot's firmware, re-import over it (the web import page is the only
+slot-writing path); there is no on-device delete.
 
 Inside an adapted child firmware: OK LONG = return to launcher (wired by the child,
 see below).
@@ -139,7 +141,8 @@ return, include `main/metapass_hook.h` and wire two calls:
 
 Signed badge (optional): `tools/signing/sign-firmware.sh <app.bin> [--egg-text "..."]`
 appends an ECDSA-P256 badge (+ optional easter-egg text) after the image; meta-pass then
-shows SIGNED on the detail page and boots without the warning page. Input may be a bare
+records SIGNED for that slot (logged at boot). Signing does not change the boot path — the
+badge is provenance metadata, not a gate. Input may be a bare
 app image **or the full merged image (bootloader + partition table + app — the
 marketplace flashable format)**; merged inputs keep their header bytes byte-for-byte and
 only the pad + 4 KB metadata sector are appended. The private key lives
@@ -236,7 +239,7 @@ are pure-logic modules with no ESP-IDF dependency.
 | --- | --- |
 | Build | Full `validate.sh` gate PASS; app 1,024,880 / 1,507,328 B (32% free); merged image 8 MB; `cardid` untouched |
 | Host tests | `meta_image`/`meta_slots`/`meta_import`/`meta_name` suites all pass; installer node tests 7/7; **new** `test_meta_net_contract.py` pins JS↔C HTTP route consistency; **new** `test_meta_net_upload.c` (21 cases) drives the full pair→upload→flash→verify→blob flow with real SHA-256, stubbing ESP-IDF — zero hardware required |
-| Simulator (passport-sim) | 3-slot list with real names via dynamic blob offsets (ota_0→0x355000, ota_1→0x55f000); navigation; detail metadata (`name: Pocket Walkie`, ver 1, 1262 KB, sha prefix); empty-slot BOOT no-op; unsigned warning page; LONG2 boot ota_0; hard-reset rollback to launcher; ota_1 Passport Radar boot + rollback; DELETE→LONG2 erase persists across reboot; IMPORT page (credentials/pair code/countdown); two observations judged non-firmware bugs (confirm-page residual rows = emulator canvas dirty-region artifact; import-page long-press exit needs longer hold = emulator timing model) — *recorded 2026-09-13, before LONG2 removal and the BOOT/CANCEL boot menu; those two interactions need a re-run* |
+| Simulator (passport-sim) | 3-slot list with real names via dynamic blob offsets (ota_0→0x355000, ota_1→0x55f000); navigation; empty-slot OK no-op; boot ota_0; hard-reset rollback to launcher; ota_1 Passport Radar boot + rollback; IMPORT page (credentials/pair code/countdown) — *recorded 2026-09-13 and updated 2026-09-23; the row still names the pre-2026-09-23 interactions (detail metadata view, unsigned warning page, BOOT/CANCEL menu, on-device DELETE) that the one-click boot flow removed, and those need a re-run* |
 | GitHub Actions | Static checks (Linux/GCC), firmware gate (ESPIDF Docker) — both green |
 | CI artifact SHA-256 | `b86ca4fe…1b28e773` (canonical reference for marketplace publishing; local builds differ in embedded compile timestamp) |
 

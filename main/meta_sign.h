@@ -61,7 +61,7 @@ static inline uint32_t meta_sign_app_limit(uint32_t part_size)
 // 验签结果。
 typedef enum {
     META_SIG_OK = 0,           // 签名段存在且验签通过
-    META_SIG_ABSENT,           // 无签名段(未签名固件,合法,显示警告)
+    META_SIG_ABSENT,           // 无签名段(未签名固件,合法,仅记录状态不拦截启动)
     META_SIG_BAD_MAGIC,        // 有数据但 magic 不是 MSIG(视为未签名)
     META_SIG_BAD_FORMAT,       // magic 对但 payload_len 不对
     META_SIG_BAD_CHECKSUM,     // xor 校验失败

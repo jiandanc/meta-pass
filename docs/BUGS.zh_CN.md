@@ -18,8 +18,9 @@
 
 ## PASS-RADAR "仍然提示未签名" — 根因与结论
 
-实测现象:用修复后的签名工具签出的 pass-radar 固件,设备引导时仍提示
-"Unsigned firmware!"。
+实测现象:用修复后的签名工具签出的 pass-radar 固件,设备引导时仍提示未签名
+(launcher 日志 `signature: unsigned`;当时还会在屏幕上弹出 "Unsigned firmware!" 警告页,
+该页已于 2026-09-23 移除)。
 
 排查过程(全部在本机可复现):
 
@@ -35,8 +36,8 @@
    `node tools/install-slot/server.mjs` → 开发副本安装页。该副本(a)用
    第二次 `writeFlash` 向已含 MSIG 签名的同一 4KB 尾扇区写显示名 blob,
    把签名擦掉;(b)按分区大小计算 blob 地址,烧写到槽位分区之外。经它
-   安装必然破坏签名扇区 → launcher 读到全 0xFF 的尾部 → "Unsigned
-   firmware!" —— 尽管 .bin 文件本身的签名完全正确。
+   安装必然破坏签名扇区 → launcher 读到全 0xFF 的尾部 → 槽位被判定为未签名
+   —— 尽管 .bin 文件本身的签名完全正确。
 
 **结论:** 用当前 `sign-firmware.sh` 重新签名后,经(已修复的)开发页或
 Cloudflare Pages 正式页安装;不要再用旧开发页此前烧写过的产物直接重装
@@ -89,8 +90,8 @@ static void add_battery(lv_obj_t *parent)
 编译 `main.c`,`-Werror` 因此从未发现。
 
 **根因。** 半成品功能:SOC → 文本格式化和"不可用则不画"的守卫从未编写。
-两处调用点都受影响——列表页(`main.c:143`)和详情页(`main.c:308`),即
-最常用的两个页面右上角都是垃圾内容。
+两处调用点都受影响——列表页(`main.c:143`)和详情页(`main.c:308`,该页已于
+2026-09-23 移除),即最常用的两个页面右上角都是垃圾内容。
 
 **修复方案。**
 
@@ -211,8 +212,7 @@ const blobAddr = address + blobOffset(s.size);
 开发页先写 app 镜像,再发**第二次** `writeFlash` 写 blob(开发页:552-569)。
 esptool 写 flash 前会擦除目标扇区,第二次调用落在第一次已写过的同一 4KB
 尾扇区上,把先写入的内容抹掉。签名镜像的 MNAM 窗口与 MSIG 同扇区,因此
-**经开发页安装的签名固件会丢失签名**,启动器对可信构建显示 "Unsigned
-firmware!"。线上页的注释正是为此而写("分次 writeFlash 会重复擦除同一
+**经开发页安装的签名固件会丢失签名**,启动器把该槽位判定为未签名。线上页的注释正是为此而写("分次 writeFlash 会重复擦除同一
 sector,把先写入的签名/彩蛋擦掉",`install-slot/install-slot.html:562-563`)
 ——修复从未同步回开发副本。
 
