@@ -13,6 +13,70 @@
 | BUG-02 | 高 | `main/meta_sign.c` | `HOST_TEST` 变体的彩蛋 magic 判断反了 | **已修复**(上游提交)— `tests/test_meta_net_upload.c` 已加 m1–m4 回归测试 |
 | BUG-03 | 高 | `tools/install-slot/`(开发副本) | 与线上安装页脱节:显示名 blob 写到分区外、双写擦掉签名、头部标志位判断漂移 | **已修复 + 结构性修复完成** — 开发页重复文件已删除;`server.mjs` 直接服务规范的 `install-slot/` |
 | BUG-04 | 低 | `main/meta_net.c` | 上传成功日志用 `%d` 打印 `size_t` | **已修复** — `meta_net.c:407` 改 `%zu` |
+| BUG-05 | 高 | `components/bsp/src/bsp_display.c`、`bootloader_components/meta_boot_hooks/hooks.c` | 子固件自身空闲深睡后按键唤醒落到启动器(面板未重新初始化 → 有背光、黑屏;点亮后仍停在启动器列表页而非子固件) | **已修复** — 从子固件 BSP 移植唤醒恢复 + bootloader 钩子在深睡唤醒时把该槽的 otadata 副本续期为 `VALID` |
+
+---
+
+## BUG-05 — 子固件息屏唤醒:有背光、界面全黑
+
+**实测现象。** 启动槽位 1(一个 30 秒降亮、60 秒无操作进深睡的子固件),等它睡下后
+按键唤醒:背光点亮,界面一直是黑的。不烧启动器、直接烧该子固件则不复现。
+
+**根因 —— 两个独立缺陷,都在启动器一侧。**
+
+深睡唤醒对 bootloader 而言是一次完整启动。子固件 BSP 留下的两样东西,启动器都没处理:
+
+1. **唤醒后跑起来的是启动器,不是子固件。** 子固件从不写 `VALID`,其 otadata 副本停在
+   `PENDING_VERIFY`。启动器开了 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`,IDF
+   bootloader 在选择分区前先把它标成 `ABORTED`(`bootloader_utility.c:399-401`),
+   `bootloader_common_ota_select_invalid()` 判其无效(`bootloader_common_loader.c:76`),
+   两个副本都没有候选,于是打出 "Defaulting to factory image"
+   (`bootloader_utility.c:412-415`)—— 即启动器。hook 的深睡早退(`hooks.c:98`)跳过的是
+   *策略*,改不了这条 IDF 标准路径。所以唤醒不是"续玩",而是子固件当场退出。
+2. **启动器的显示初始化无法唤醒一块已睡的面板。** `bsp_display_init()` 先发 SWRESET
+   (`bsp_display.c:118`),SLPOUT 要到 `esp_lcd_panel_init()` 才发。面板此时仍处
+   Sleep In(振荡器停振),SWRESET 不仅无效,还可能让命令解码状态机死锁 —— 子固件
+   自己的 BSP 就记录了这个坑并提前发 SLPOUT(`tianshang .../bsp_display.c:173-177`)。
+   启动器这份还从不释放子固件的 `gpio_hold_en()` / `gpio_deep_sleep_hold_en()`;
+   hold 可跨复位保留,引脚一直被锁在休眠电平上,于是 SPI 命令全被吞掉,而背光
+   (LEDC 单独一路)照常点亮。净效果:**有背光、黑屏**。
+
+子固件的 BSP 只是更新:上游 commit `8501cb2` 做了加固,启动器这份早于它
+(本仓库 `git log -S "prepare_deep_sleep"` 为空)。制品级证据:恢复相关字符串在子固件
+镜像里各出现 1 次,在已发布的启动器镜像里 0 次。
+
+**修复(第一版,留档:真机实测失败)。** 启用
+`CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP=y`,唤醒走 fast-boot 路径(按 RTC 保留
+内存里的分区引导,不读 otadata、不标 ABORT)。真机上唤醒仍落到启动器。根因(据 IDF
+源码):该选项把"上次引导的分区"记在 RTC 快速内存顶部的 `rtc_retain_mem_t`
+(`SOC_RTC_DRAM_HIGH - 16`),而链接脚本只在 `CONFIG_BOOTLOADER_RESERVE_RTC_MEM` 打开时
+才为它预留空间。子固件的构建没开这一项 —— 它的 `RTC_TIMER_RESERVE_RTC` 区域正好覆盖
+那 16 字节 —— 于是子固件一运行就覆盖了记录,CRC 校验失败,
+`bootloader_load_image_no_verify` 返回错误,`bootloader_utility_load_boot_image_from_deep_sleep`
+打出 "Fast booting is not successful" 后回落到常规路径。该选项要求每个子固件配合,
+正是开机策略规则所禁止的依赖。
+
+**修复(最终版)。**(1) bootloader 钩子(`bootloader_after_init`,执行点在
+`bootloader_start.c:39` —— flash 已就绪、`select_partition_number` 把 PENDING 标
+ABORTED 之前)按 `esp_rom_get_reset_reason(0)` 分流。深睡唤醒时把正在运行的子固件的
+`PENDING_VERIFY` 副本续期为 `VALID`,bootloader 随即引导回该槽位,且不需要子固件做任何
+配置。该改写安全的前提是 CRC 只覆盖 `ota_seq`(`bootloader_common_loader.c:69-72`);先擦
+后写则是因为 flash 只能把 1 写成 0,而 `0x1 -> 0x2` 需要把 bit1 置 1。(2) 把子固件的
+唤醒恢复移植进启动器 BSP:在 SPI 接管引脚前先解除全局与单引脚 hold,再在面板复位前补发
+`0x11` SLPOUT + 120ms。(2) 兜住仍回退到启动器的路径,对任何使用深睡的子固件都有效。
+
+**验证。** `tests/test_display_wake_contract.py`(6 例)钉住顺序与续期接线;
+`tests/test_meta_boot_policy.c` 覆盖 `must_resume` 全状态,并断言两条规则互斥。构建制品
+已核对:`bsp_display_init` 反汇编顺序为 `gpio_deep_sleep_hold_dis` →
+`gpio_config`/`gpio_hold_dis` → `spi_bus_initialize` → `esp_lcd_new_panel_io_spi` →
+`esp_lcd_panel_io_tx_param(0x11)` → `vTaskDelay` → `esp_lcd_panel_reset`;bootloader ELF
+里的 `bootloader_after_init` 调用了 `esp_rom_get_reset_reason`、
+`bootloader_common_ota_select_crc`、`bootloader_flash_read`、
+`bootloader_flash_erase_sector` 与 `bootloader_flash_write`,且 bootloader 镜像同时含有
+两条策略字符串("resuming ota_%u … PENDING -> VALID" 与 "in VALID state -> erasing"),
+fast-boot 字符串已消失。真机验证（2026-09-24）：子固件自行息屏进深睡后按键唤醒可回到该
+固件且屏幕正常点亮，再走一轮息屏/唤醒仍能续玩。未复测：冷复位回滚到启动器、其他子固件、
+其他板卡版本。
 
 ---
 

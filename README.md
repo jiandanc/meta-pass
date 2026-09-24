@@ -57,8 +57,10 @@ switch. No custom bootloader changes.
   firmware alike, with no confirmation step. There is no eFuse-enforced signing, so
   malicious firmware would still get full flash access; only install firmware from
   sources you trust.
-  reboot (including power loss) returns to the launcher. Adapted firmware can
-  persist and wires OK LONG to return to the launcher.
+- **Never trapped in a child**: un-adapted firmware runs as a trial — any reboot
+  (including power loss) returns to the launcher. Adapted firmware can persist and
+  wires OK LONG to return to the launcher. A child that sleeps on its own idle
+  timeout resumes when you press a key.
 - **Identity safety**: the `cardid` partition is avoided by every install/flash path;
   `verify_firmware.py` byte-checks the baseline layout in the gate.
 
@@ -235,10 +237,11 @@ are pure-logic modules with no ESP-IDF dependency.
 
 ## Verification record
 
-| Category | Result (2026-09-13) |
+| Category | Result (2026-09-13; build, host-test and device rows updated 2026-09-24) |
 | --- | --- |
-| Build | Full `validate.sh` gate PASS; app 1,024,880 / 1,507,328 B (32% free); merged image 8 MB; `cardid` untouched |
-| Host tests | `meta_image`/`meta_slots`/`meta_import`/`meta_name` suites all pass; installer node tests 7/7; **new** `test_meta_net_contract.py` pins JS↔C HTTP route consistency; **new** `test_meta_net_upload.c` (21 cases) drives the full pair→upload→flash→verify→blob flow with real SHA-256, stubbing ESP-IDF — zero hardware required |
+| Build | Full `validate.sh` gate PASS; app 1,026,288 / 1,507,328 B (32% free); merged image 8 MB; `cardid` untouched; release single file `meta-pass_v1.0.0-5-g0abb320.bin` (1,091,868 B, MPUPV2 footer self-check passes) |
+| Host tests | `meta_image`/`meta_slots`/`meta_import`/`meta_name` suites all pass; installer node tests 7/7; `test_meta_net_contract.py` pins JS↔C HTTP route consistency; `test_meta_net_upload.c` (21 cases) drives the full pair→upload→flash→verify→blob flow with real SHA-256, stubbing ESP-IDF — zero hardware required; **new** `test_display_wake_contract.py` (6 cases) pins the deep-sleep wake-recovery ordering and the otadata-resume wiring in the bootloader hook; `test_meta_boot_policy.c` now covers `must_resume` across every state |
+| Device tests | Child idle deep-sleep + key wake returns to the child with a lit screen, and a repeat cycle still resumes (2026-09-24, on the board that reported BUG-05). Not covered: cold-reset rollback re-run, other children, other board revisions |
 | Simulator (passport-sim) | 3-slot list with real names via dynamic blob offsets (ota_0→0x355000, ota_1→0x55f000); navigation; empty-slot OK no-op; boot ota_0; hard-reset rollback to launcher; ota_1 Passport Radar boot + rollback; IMPORT page (credentials/pair code/countdown) — *recorded 2026-09-13 and updated 2026-09-23; the row still names the pre-2026-09-23 interactions (detail metadata view, unsigned warning page, BOOT/CANCEL menu, on-device DELETE) that the one-click boot flow removed, and those need a re-run* |
 | GitHub Actions | Static checks (Linux/GCC), firmware gate (ESPIDF Docker) — both green |
 | CI artifact SHA-256 | `b86ca4fe…1b28e773` (canonical reference for marketplace publishing; local builds differ in embedded compile timestamp) |
@@ -258,5 +261,6 @@ This is an unofficial project, not affiliated with FoloToy.
 | Serial picker is empty | Device is not in download mode (hold UP while powering on), or the USB cable is charge-only |
 | Child firmware ignores buttons / no OK LONG return | Un-adapted firmware has no return hook; power-cycle to return (rollback). By design |
 | Rebooting a child lands back in the launcher | By design (single-session model): every power-on returns to the launcher list page; crash recovery uses the same rollback |
+| Child's screen stays black after its own idle-sleep wake, or the wake lands in the launcher | The child slept (e.g. 60 s idle), and the key press is a full bootloader start. Fixed in the current launcher: display init releases the child's pin holds and wakes the panel (no more black screen), and the bootloader hook renews the slot's otadata copy to VALID so the bootloader boots the child directly (no more landing on the list page). Update the launcher if you still see this |
 | Slot shows "AI-Passport" instead of the play name | The firmware was installed without a display-name blob (merged image / old channel); reinstall via the USB page with a Display name |
 | Image rejected | Over the slot's limit (`partition_size − 4KB`, the last 4KB sector is reserved for the name blob), or not an ESP32-C3 image |

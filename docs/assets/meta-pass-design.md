@@ -83,6 +83,27 @@ not enforced by the partition table.
   flow is unaffected by this policy.
 - **Launcher itself**: `app_main` erases otadata early so the bootloader defaults to
   factory; nothing else needed (factory is the default boot target when otadata is empty).
+- **Deep-sleep wake resumes the child (2026-09-24)**: a child that sleeps on its own idle
+  timeout (e.g. tianshang, 60 s) must come back on a key press. A wake is a full bootloader
+  start, so without special handling the child's PENDING_VERIFY copy would be marked ABORTED
+  and the bootloader would fall back to the launcher — the child would exit rather than
+  resume. The bootloader hook branches on the reset reason: on a deep-sleep wake it renews
+  the running child's PENDING_VERIFY copy to VALID (re-checking the CRC, erasing the sector
+  first because flash programming is one-way), and the bootloader resumes that slot. A real
+  restart (power cycle, watchdog, crash) still takes the full validated path and still
+  returns to the launcher, so the single-session model is unchanged; the VALID written here
+  is erased by the next cold boot.
+
+  IDF's own `CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP` was tried first and abandoned:
+  it records the resume target in `rtc_retain_mem_t` at the top of RTC fast memory, which
+  the link script reserves only under `CONFIG_BOOTLOADER_RESERVE_RTC_MEM`. A child's build
+  does not set that, so the child's RTC timer data overwrites the record and fast boot
+  silently falls back — a dependency on every child firmware opting in, which this section's
+  own rule (system-level policy is never delegated to children) rules out.
+
+  Independently of that, the launcher's display init recovers a panel left in Sleep In and
+  releases the child's GPIO holds (`components/bsp/src/bsp_display.c`) — the fallback path
+  would otherwise show a lit backlight over a black screen.
 
 ## 5. Child Adaptation Convention (optional but recommended)
 

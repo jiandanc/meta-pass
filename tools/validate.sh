@@ -88,6 +88,8 @@ PY
     "${test_dir}/test_meta_sign"
     python3 tests/test_verify_firmware.py
     python3 tests/test_meta_net_contract.py
+    # 深睡唤醒契约(面板唤醒恢复顺序 + bootloader hook 的 otadata 续期路径)
+    PYTHONDONTWRITEBYTECODE=1 python3 tests/test_display_wake_contract.py
     # 浏览器侧(install-slot)模块与页面逻辑测试(Node ES module):
     local node_bin
     node_bin="$(command -v node || true)"

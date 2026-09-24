@@ -49,7 +49,8 @@ bootloader 改动。
   二次确认步骤。没有 eFuse 强制签名，恶意固件仍有完整 Flash 读写能力，
   所以只装你信任来源的固件。
 - **永不困在子固件里**：未适配的子固件一律按"试运行"处理——任何重启（含断电）都
-  自动回启动器；适配过的固件可以长期驻留，并提供 OK 长按返回启动器。
+  自动回启动器；适配过的固件可以长期驻留，并提供 OK 长按返回启动器。子固件自己
+  按空闲超时息屏进深睡后，按键唤醒会回到该固件继续运行。
 - **身份区安全**：`cardid` 分区被所有安装/烧录路径避开；`verify_firmware.py` 在
   门禁里逐字节校验基线布局。
 
@@ -207,10 +208,11 @@ node tools/install-slot/test-extract.mjs   # 安装页解包/名字 blob 测试
 
 ## 验证记录
 
-| 类别 | 结果（2026-09-13） |
+| 类别 | 结果（2026-09-13；2026-09-24 更新构建、Host tests 与真机三行） |
 | --- | --- |
-| 构建 | `validate.sh` 全门禁 PASS；应用 1,024,880 / 1,507,328 B（32% 余量）；合并镜像 8 MB；`cardid` 不动 |
-| Host tests | `meta_image`/`meta_slots`/`meta_import`/`meta_name` 四套件全过；安装页 node 测试 7/7；**新增** `test_meta_net_contract.py` 钉住 JS↔C 路由契约（方法+路径一致性）；**新增** `test_meta_net_upload.c`（21 用例）用真实 FIPS 180-4 SHA-256 驱动完整的配对→上传→刷入→校验→blob 流程，ESP-IDF 桩替换，零硬件可测 |
+| 构建 | `validate.sh` 全门禁 PASS；应用 1,026,288 / 1,507,328 B（32% 余量）；合并镜像 8 MB；`cardid` 不动；发布单文件 `meta-pass_v1.0.0-5-g0abb320.bin`（1,091,868 B，MPUPV2 指纹尾段自校验通过） |
+| Host tests | `meta_image`/`meta_slots`/`meta_import`/`meta_name` 四套件全过；安装页 node 测试 7/7；`test_meta_net_contract.py` 钉住 JS↔C 路由契约（方法+路径一致性）；`test_meta_net_upload.c`（21 用例）用真实 FIPS 180-4 SHA-256 驱动完整的配对→上传→刷入→校验→blob 流程，ESP-IDF 桩替换，零硬件可测；**新增** `test_display_wake_contract.py`（6 例）钉住深睡唤醒恢复顺序与 bootloader 钩子里的 otadata 续期接线；`test_meta_boot_policy.c` 新增 `must_resume` 全状态覆盖 |
+| 真机测试 | 子固件自行息屏进深睡后按键唤醒可回到该固件且屏幕正常点亮，重复一轮息屏/唤醒仍可续玩（2026-09-24，在报告 BUG-05 的那块板子上）。未覆盖：冷复位回滚复测、其他子固件、其他板卡版本 |
 | 模拟器（passport-sim） | 三槽列表（含动态 blob 偏移的真名：ota_0→0x355000，ota_1→0x55f000）；导航；空槽 OK 无操作；启动 ota_0；硬重启回滚到启动器；ota_1 Passport Radar 启动 + 回滚；IMPORT 页（凭证/配对码/倒计时） — *记录于 2026-09-13、2026-09-23 更新；该行仍写着 2026-09-23 之前的交互（详情元数据、未签名警告页、BOOT/CANCEL 菜单、设备端 DELETE），这些已被一键启动流程移除，需重测* |
 | GitHub Actions | 静态检查（Linux/GCC）✅、固件门禁（ESP-IDF Docker）✅ |
 | CI artifact SHA-256 | `b86ca4fe…1b28e773`（分发包权威参考；本地编译因嵌入时间戳哈希不同） |
@@ -228,5 +230,6 @@ MIT）开发：`factory`/`cardid` 布局、`verify_firmware.py` 等基线契约�
 | 串口选择框是空的 | 设备没进下载模式（按住 UP 再开机），或 USB 线只能充电 |
 | 子固件里按键没反应 / 无法 OK 长按返回 | 未适配固件没有返回钩子；断电重启即回启动器（回滚机制），这是设计行为 |
 | 子固件重启后回到了启动器 | 按设计（单次会话模型）：每次上电都回启动器列表页；崩溃自恢复走同一回滚机制 |
+| 子固件自己息屏后按键唤醒是黑屏或回到启动器 | 子固件（如 60 秒无操作）进了深睡，按键唤醒对 bootloader 是一次完整启动。当前启动器已修复：显示初始化会先解除子固件留下的引脚 hold 并唤醒面板（不再黑屏），bootloader 钩子则把该槽的 otadata 副本续期为 VALID，直接引导回子固件（不再落到列表页）。若仍出现请升级启动器 |
 | 槽位显示 "AI-Passport" 而不是玩法名 | 该固件经合成镜像/旧通道装入，没有显示名 blob；用 USB 安装页重装并填 Display name |
 | 镜像被拒绝 | 超过槽位上限（分区大小 − 4KB，尾部 4KB 保留给名字 blob），或不是 ESP32-C3 镜像 |

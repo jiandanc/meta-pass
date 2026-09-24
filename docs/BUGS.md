@@ -14,6 +14,81 @@ listed at the end, with evidence.
 | BUG-02 | High | `main/meta_sign.c` | Inverted egg-magic check in the `HOST_TEST` `meta_egg_parse` variant | **FIXED** (upstream commit) — regression tests `m1`–`m4` added to `tests/test_meta_net_upload.c` |
 | BUG-03 | High | `tools/install-slot/` (dev copy) | Diverged from shipped installer: out-of-partition name-blob write, double-write erases signatures, header-flag drift | **FIXED + structural fix done** — dev page files deleted; `server.mjs` now serves the canonical `install-slot/` directly |
 | BUG-04 | Low | `main/meta_net.c` | `%d` used for `size_t` in the upload-success log | **FIXED** — `%zu` at `meta_net.c:407` |
+| BUG-05 | High | `components/bsp/src/bsp_display.c`, `bootloader_components/meta_boot_hooks/hooks.c` | Child's idle deep sleep + key wake lands in the launcher (panel never re-initialized → backlight on, screen black; once lit, still the launcher list instead of the child) | **FIXED** — wake-recovery ported from the child BSP + the bootloader hook renews the child's otadata copy to `VALID` on a deep-sleep wake |
+
+---
+
+## BUG-05 — child idle-sleep wake: backlight on, screen black
+
+**Symptom (on-device).** Boot slot 1 (a child firmware that dims at 30 s and deep-sleeps
+at 60 s idle). Let it sleep, then press a key. The backlight lights up but the display
+stays black. Flashing the child directly (no launcher) does not reproduce it.
+
+**Root cause — two independent defects, both launcher-side.**
+
+A wake from deep sleep is a full bootloader start. The child's BSP leaves two things
+behind that the launcher never handled:
+
+1. **The launcher is what boots, not the child.** The child never writes `VALID`, so its
+   otadata copy sits at `PENDING_VERIFY`. With `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`
+   the IDF bootloader marks that copy `ABORTED` before selection
+   (`bootloader_utility.c:399-401`), `bootloader_common_ota_select_invalid()` rejects it
+   (`bootloader_common_loader.c:76`), neither copy is a candidate, and it logs "Defaulting
+   to factory image" (`bootloader_utility.c:412-415`) — i.e. the launcher. The hook's
+   deep-sleep early return (`hooks.c:98`) skips the *policy* but cannot change this
+   standard path. So the child exits on wake rather than resuming.
+2. **The launcher's display init could not revive a slept panel.** `bsp_display_init()`
+   sent SWRESET first (`bsp_display.c:118`) and SLPOUT only later via
+   `esp_lcd_panel_init()`. The panel is still in Sleep In (oscillator stopped), where
+   SWRESET is ineffective and can deadlock the command decoder; the child's own BSP
+   documents this and pre-sends SLPOUT (`tianshang .../bsp_display.c:173-177`). The
+   launcher's copy also never released the child's `gpio_hold_en()` /
+   `gpio_deep_sleep_hold_en()` pins, which survive a reset and keep the pads latched at
+   sleep levels — so every SPI command is swallowed while the backlight (a separate LEDC
+   channel) comes up normally. Net effect: backlight on, screen black.
+
+The child's BSP is simply newer: commit `8501cb2` hardened it upstream; the launcher's
+copy predates it (`git log -S "prepare_deep_sleep"` is empty here). Confirmed at the
+artifact level — the recovery strings occur once in the child image and zero times in the
+shipped launcher image.
+
+**Fix — first attempt (kept for the record, it failed on device).** Enable
+`CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP=y` so the wake takes the fast-boot path
+(boots the partition in RTC-retained memory, no otadata read, no ABORT). On device the
+wake still landed in the launcher. Root cause, from the IDF sources: that option stores the
+resume target in `rtc_retain_mem_t` at the top of RTC fast memory
+(`SOC_RTC_DRAM_HIGH - 16`), which the link script reserves only when
+`CONFIG_BOOTLOADER_RESERVE_RTC_MEM` is set. A child firmware's build does not set it — its
+`RTC_TIMER_RESERVE_RTC` region covers exactly those bytes — so the child overwrites the
+record the moment it runs, the CRC fails, `bootloader_load_image_no_verify` returns an
+error, and `bootloader_utility_load_boot_image_from_deep_sleep` logs "Fast booting is not
+successful" and falls through to the normal path. The option would need every child
+firmware to opt in, which is the per-child cooperation the boot-policy rule forbids.
+
+**Fix — final.** (1) The bootloader hook (`bootloader_after_init`, which runs at
+`bootloader_start.c:39` — after flash is up, before `select_partition_number` marks
+PENDING as ABORTED) branches on `esp_rom_get_reset_reason(0)`. On a deep-sleep wake it
+renews the running child's `PENDING_VERIFY` otadata copy to `VALID`, so the bootloader
+resumes that slot with no child-side configuration. The rewrite is safe because the CRC
+covers only `ota_seq` (`bootloader_common_loader.c:69-72`), and it erases before writing
+because flash programming is one-way and `0x1 -> 0x2` sets a bit. (2) Port the child's wake
+recovery into the launcher BSP: release the global and per-pin holds before SPI takes the
+pins, then send `0x11` SLPOUT + 120 ms before the panel reset. (2) covers the fallback path
+and helps any deep-sleeping child.
+
+**Verification.** `tests/test_display_wake_contract.py` (6 cases) pins the ordering and the
+resume wiring; `tests/test_meta_boot_policy.c` covers `must_resume` across all states and
+asserts the two rules are mutually exclusive. Built artifact checked: `bsp_display_init`
+disassembles with `gpio_deep_sleep_hold_dis` → `gpio_config`/`gpio_hold_dis` →
+`spi_bus_initialize` → `esp_lcd_new_panel_io_spi` → `esp_lcd_panel_io_tx_param(0x11)` →
+`vTaskDelay` → `esp_lcd_panel_reset`; `bootloader_after_init` in the bootloader ELF calls
+`esp_rom_get_reset_reason`, `bootloader_common_ota_select_crc`, `bootloader_flash_read`,
+`bootloader_flash_erase_sector` and `bootloader_flash_write`, and the bootloader image
+carries both policy strings ("resuming ota_%u … PENDING -> VALID" and "in VALID state ->
+erasing"). The fast-boot string is gone. On device (2026-09-24): the child's idle deep
+sleep followed by a key press returns to the child with a lit screen, and a second
+sleep/wake cycle still resumes. Not re-run: cold-reset rollback to the launcher, other
+children, other board revisions.
 
 ---
 

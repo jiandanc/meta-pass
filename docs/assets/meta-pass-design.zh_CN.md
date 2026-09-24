@@ -56,6 +56,22 @@ meta-pass 是 AI Passport 的**多固件启动器**：作为 factory 应用常�
   bootloader 在选择前自动标 ABORTED，trial-run 流程不受本策略影响。
 - **启动器自身**：`app_main` 早期擦除 otadata，bootloader 在 otadata 为空时默认引导
   factory；无需其他操作。
+- **深睡唤醒回到子固件（2026-09-24）**：子固件按自身空闲超时入睡（如 tianshang 60 秒）
+  后，按键唤醒必须能回到该固件。唤醒是一次完整 bootloader 启动，若不特殊处理，子固件的
+  PENDING_VERIFY 副本会被标成 ABORTED，bootloader 回退到启动器 —— 结果是子固件退出而非
+  续玩。bootloader 钩子按复位原因分流：深睡唤醒时把正在运行的子固件那条 PENDING_VERIFY
+  副本续期为 VALID（先复核 CRC，再擦除扇区后写入 —— flash 只能把 1 写成 0），bootloader
+  随即引导回该槽位。真正的重启（断电/看门狗/崩溃）仍走完整校验路径并回到启动器，单次会话
+  模型不变；续期写出的 VALID 会在下一次冷启动被擦除。
+
+  IDF 自带的 `CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP` 先试过、已废弃：它把"上次
+  引导的分区"记在 RTC 快速内存顶部的 `rtc_retain_mem_t`，而链接脚本只在
+  `CONFIG_BOOTLOADER_RESERVE_RTC_MEM` 打开时才为它预留空间。子固件没开这一项，其 RTC
+  定时器数据会覆盖那条记录，快速引导静默回退 —— 这依赖每个子固件配合，正是本节自己的
+  规则（系统级策略不委托子固件）所排除的。
+
+  与此独立地，启动器的显示初始化还负责唤醒一块仍处 Sleep In 的面板并解除子固件的 GPIO
+  hold（`components/bsp/src/bsp_display.c`）—— 否则回退路径会表现为有背光但黑屏。
 
 ## 5. 子固件适配约定（可选但推荐）
 

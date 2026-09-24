@@ -6,6 +6,40 @@
 
 ## Unreleased
 
+- A child that sleeps on its own idle timeout resumes on a key press (2026-09-24). When a
+  slot firmware deep-sleeps after its own idle timeout (60 s, say), a key press is a full
+  bootloader start: the slot's otadata copy is still `PENDING_VERIFY`, the rollback logic
+  marks it `ABORTED`, neither copy is a candidate, and the bootloader falls back to the
+  factory launcher. The child exits instead of resuming. Two changes:
+
+  (1) The bootloader hook now branches on the reset reason. On a deep-sleep wake it renews
+  the running child's `PENDING_VERIFY` copy to `VALID` — re-checking the CRC and erasing the
+  sector first, since flash programming is one-way — so the bootloader resumes that slot.
+  `PENDING_VERIFY` is only ever written by the bootloader when it selects an OTA slot, so
+  reading it means "the last boot was a child that has not confirmed itself". A cold reset
+  (power loss, watchdog, crash, software restart) still runs the original `VALID`-erase
+  policy and still returns to the launcher, so the single-session model is unchanged, and
+  the `VALID` this path writes is erased by the next cold boot.
+
+  The launcher-side rewrite is deliberate. IDF's
+  `CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP` was tried first and abandoned on device
+  evidence: it records the resume target in `rtc_retain_mem_t` at the top of RTC fast
+  memory, which the link script reserves only when `CONFIG_BOOTLOADER_RESERVE_RTC_MEM` is
+  set. A child firmware's build does not set it (its RTC timer data covers those 16 bytes),
+  so the child overwrites the record as soon as it runs, the CRC check fails, fast boot
+  silently falls back to the normal path, and the user still lands in the launcher. Making
+  it work would require every child firmware to opt in — exactly the kind of per-child
+  cooperation the boot-policy rule forbids. Rewriting otadata has no such dependency.
+
+  (2) The launcher's display init gains deep-sleep wake recovery: it releases the pin holds
+  the child left behind (holds survive a reset; unreleased, they swallow every SPI init
+  command — a lit backlight over a black screen), and sends `0x11` SLPOUT before the panel
+  reset to leave Sleep In (this board's reset pin is not wired to the MCU, and a
+  stopped-oscillator panel deadlocks on SWRESET). That second fix covers the path that
+  still falls back to the launcher and helps any child that uses deep sleep. New contract
+  test `tests/test_display_wake_contract.py` (6 cases) pins the wake-recovery ordering and
+  the otadata-resume wiring, wired into `tools/validate.sh --static`.
+
 - Launcher UI simplified to **one-click boot** (2026-09-23): selecting a slot in the main
   list and pressing OK now starts that firmware immediately, signed or unsigned. The slot
   detail page (BOOT / DELETE / BACK), the unsigned-firmware BOOT / CANCEL warning page, and
